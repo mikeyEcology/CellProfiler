@@ -627,12 +627,10 @@ the two images. Set this setting to “No” to assess no penalty.""",
         )
 
     def get_labels_mask(self, obj):
-        # labels_mask = numpy.zeros(obj.shape, bool)
-        # # for labels in obj:
-        # for labels, indexes in obj.get_labels():
-        #     labels_mask = labels_mask | labels > 0
-        # return labels_mask
-        return obj.segmented > 0
+        labels_mask = numpy.zeros(obj.shape, bool)
+        for labels, indexes in obj.get_labels():
+            labels_mask = labels_mask | labels > 0
+        return labels_mask
 
     def get_skeleton_points(self, obj):
         """Get points by skeletonizing the objects and decimating"""
@@ -694,22 +692,7 @@ the two images. Set this setting to “No” to assess no penalty.""",
         """
         from sklearn.cluster import KMeans
 
-        def create_sparse(dense_label_map):
-            # Initialize an empty ijv array
-            ijv_array = []
-
-            # Loop through each pixel in the dense label map
-            for i in range(dense_label_map.shape[0]):
-                for j in range(dense_label_map.shape[1]):
-                    value = dense_label_map[i, j]
-                    if value != 0:
-                        ijv_array.append((i, j, value))
-
-            # Return the resulting ijv array
-            return numpy.array(ijv_array)
-
-        # ijv = numpy.vstack((src_obj.ijv, dest_obj.ijv))
-        ijv = numpy.vstack((create_sparse(src_obj.segmented), create_sparse(dest_obj.segmented)))
+        ijv = numpy.vstack((src_obj.ijv, dest_obj.ijv))
         if len(ijv) <= self.max_points.value:
             return ijv[:, 0], ijv[:, 1]
         random_state = numpy.random.RandomState()
