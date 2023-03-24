@@ -7,23 +7,33 @@ import centrosome.propagate
 import centrosome.fastemd
 from typing import Literal
 from sklearn.cluster import KMeans
-# from cellprofiler.library.utils import create_ijv
 from cellprofiler.library.object import Objects
 
-def measure_image_overlap(ground_truth_image, test_image, mask=None):
+
+def measure_image_overlap(
+    ground_truth_image,
+    test_image,
+    mask=None,
+    max_distance=250,
+    penalize_missing=False,
+    decimation_method="k_means",
+    max_points=250,
+):
     # if ground_truth_image.dtype != bool or set(numpy.unique(ground_truth_image)) != set([0, 1]):
     if not numpy.array_equal(ground_truth_image, ground_truth_image.astype(bool)):
         raise ValueError("Binary image expected as input")
 
+    if mask is None:
+        mask = numpy.ones_like(ground_truth_image, bool)
+
     # Covert 3D image to 2D long
     if ground_truth_image.ndim > 2:
         ground_truth_image = ground_truth_image.reshape(
-                -1, ground_truth_image.shape[-1]
-            )
+            -1, ground_truth_image.shape[-1]
+        )
         test_image = test_image.reshape(-1, test_image.shape[-1])
 
-    if mask is None:
-        mask = numpy.ones_like(ground_truth_image, bool)
+        mask = mask.reshape(-1, mask.shape[-1])
 
     false_positives = test_image & ~ground_truth_image
 
@@ -99,11 +109,20 @@ def measure_image_overlap(ground_truth_image, test_image, mask=None):
         test_labels, ground_truth_labels, mask
     )
 
-    # emd = compute_earth_movers_distance(test_labels, ground_truth_labels)
-    emd = compute_emd(test_labels, ground_truth_labels, 250)
+    emd = compute_earth_movers_distance(
+        test_labels,
+        ground_truth_labels,
+        decimation_method,
+        max_distance,
+        max_points,
+        penalize_missing,
+    )
 
     out = {
-        # "Overlap": ,
+        "true_positives": true_positives,
+        "true_negatives": true_negatives,
+        "false_positives": false_positives,
+        "false_negatives": false_negatives,
         "Ffactor": f_factor,
         "Precision": precision,
         "Recall": recall,
@@ -116,6 +135,7 @@ def measure_image_overlap(ground_truth_image, test_image, mask=None):
         "EarthMoversDistance": emd,
     }
     return out
+
 
 def compute_rand_index(test_labels, ground_truth_labels, mask):
     """Calculate the Rand Index
@@ -219,77 +239,13 @@ def compute_rand_index(test_labels, ground_truth_labels, mask):
 
 
 def compute_earth_movers_distance(
-    src_objects1, 
-    dest_objects1,
-    decimation_method: Literal["k_means", "skeleton"] = "kmeans",
-    method: Literal["distance", "markers"] = "distance",
+    input_src_objects,
+    input_dest_objects,
+    decimation_method: Literal["k_means", "skeleton"] = "k_means",
     max_distance: int = 250,
     max_points: int = 250,
     penalize_missing: bool = False,
-    ):
-    """Compute the earthmovers distance between two sets of objects
-
-    src_objects - move pixels from these objects
-
-    dest_objects - move pixels to these objects
-
-    returns the earth mover's distance
-    """
-    assert max_distance > 1
-
-    #
-    # if either foreground set is empty, the emd is the penalty.
-    #
-    # Convert labelmaps into CellProfiler objects
-    src_objects = Objects()
-    src_objects.segmented = src_objects1
-
-    dest_objects = Objects()
-    dest_objects.segmented = dest_objects1
-
-    for angels, demons in (
-        (src_objects, dest_objects),
-        (dest_objects, src_objects),
-    ):
-        if angels.count == 0:
-            if penalize_missing:
-                return numpy.sum(demons.areas) * max_distance.value
-            else:
-                return 0
-    if decimation_method.casefold() == "kmeans":
-        isrc, jsrc = get_kmeans_points(src_objects, dest_objects, max_points)
-        idest, jdest = isrc, jsrc
-    else:
-        isrc, jsrc = get_skeleton_points(src_objects, max_points)
-        idest, jdest = get_skeleton_points(dest_objects, max_points)
-    src_weights, dest_weights = [
-        get_weights(i, j, objects > 0)
-        for i, j, objects in (
-            (isrc, jsrc, src_objects),
-            (idest, jdest, dest_objects),
-        )
-    ]
-    ioff, joff = [
-        src[:, numpy.newaxis] - dest[numpy.newaxis, :]
-        for src, dest in ((isrc, idest), (jsrc, jdest))
-    ]
-    c = numpy.sqrt(ioff * ioff + joff * joff).astype(numpy.int32)
-    c[c > max_distance.value] = max_distance.value
-    extra_mass_penalty = max_distance.value if penalize_missing else 0
-    return centrosome.fastemd.emd_hat_int32(
-        src_weights.astype(numpy.int32),
-        dest_weights.astype(numpy.int32),
-        c,
-        extra_mass_penalty=extra_mass_penalty,
-    )
-
-
-def compute_emd(src_objects1, dest_objects1,
-    decimation_method: Literal["k_means", "skeleton"] = "kmeans",
-    method: Literal["distance", "markers"] = "distance",
-    max_distance: int = 250,
-    max_points: int = 250,
-    penalize_missing: bool = False,):
+):
     """Compute the earthmovers distance between two sets of objects
 
     src_objects - move pixels from these objects
@@ -301,10 +257,10 @@ def compute_emd(src_objects1, dest_objects1,
 
     # Convert labelmaps into CellProfiler objects
     src_objects = Objects()
-    src_objects.segmented = src_objects1
+    src_objects.segmented = input_src_objects
 
     dest_objects = Objects()
-    dest_objects.segmented = dest_objects1
+    dest_objects.segmented = input_dest_objects
 
     #
     # if either foreground set is empty, the emd is the penalty.
@@ -318,7 +274,7 @@ def compute_emd(src_objects1, dest_objects1,
                 return numpy.sum(demons.areas) * max_distance
             else:
                 return 0
-    if decimation_method == "kmeans":
+    if decimation_method.casefold() == "k_means":
         isrc, jsrc = get_kmeans_points(src_objects, dest_objects, max_points)
         idest, jdest = isrc, jsrc
     else:
@@ -345,11 +301,13 @@ def compute_emd(src_objects1, dest_objects1,
         extra_mass_penalty=extra_mass_penalty,
     )
 
+
 def get_labels_mask(obj):
     labels_mask = numpy.zeros(obj.shape, bool)
     for labels, indexes in obj.get_labels():
         labels_mask = labels_mask | labels > 0
     return labels_mask
+
 
 def get_skeleton_points(obj, max_points):
     """Get points by skeletonizing the objects and decimating"""
@@ -393,11 +351,10 @@ def get_skeleton_points(obj, max_points):
         # Get a linear space of self.max_points elements with bounds at
         # 0 and len(order)-1 and use that to select the points.
         #
-        order = order[
-            numpy.linspace(0, len(order) - 1, max_points).astype(int)
-        ]
+        order = order[numpy.linspace(0, len(order) - 1, max_points).astype(int)]
         return i[order], j[order]
     return i, j
+
 
 def get_kmeans_points(src_obj, dest_obj, max_points):
     """Get representative points in the objects using K means
@@ -409,21 +366,29 @@ def get_kmeans_points(src_obj, dest_obj, max_points):
     returns a vector of i coordinates of representatives and a vector
             of j coordinates
     """
-    from sklearn.cluster import KMeans
+
+    # Add objects to Objects class if not already
+    if not isinstance(src_obj, Objects):
+        src = Objects()
+        src.segmented = src_obj
+        src_obj = src
+
+        dst = Objects()
+        dst.segmented = dest_obj
+        dest_obj = dst
 
     ijv = numpy.vstack((src_obj.ijv, dest_obj.ijv))
     if len(ijv) <= max_points:
         return ijv[:, 0], ijv[:, 1]
     random_state = numpy.random.RandomState()
     random_state.seed(ijv.astype(int).flatten())
-    kmeans = KMeans(
-        n_clusters=max_points, tol=2, random_state=random_state
-    )
+    kmeans = KMeans(n_clusters=max_points, tol=2, random_state=random_state)
     kmeans.fit(ijv[:, :2])
     return (
         kmeans.cluster_centers_[:, 0].astype(numpy.uint32),
         kmeans.cluster_centers_[:, 1].astype(numpy.uint32),
     )
+
 
 def get_weights(i, j, labels_mask):
     """Return the weights to assign each i,j point
