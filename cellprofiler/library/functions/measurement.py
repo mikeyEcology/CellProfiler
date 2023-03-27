@@ -10,18 +10,17 @@ from sklearn.cluster import KMeans
 from cellprofiler.library.object import Objects
 
 
-def measure_image_overlap(
+def measure_image_overlap_statistics(
     ground_truth_image,
     test_image,
     mask=None,
-    max_distance=250,
-    penalize_missing=False,
-    decimation_method="k_means",
-    max_points=250,
 ):
-    # if ground_truth_image.dtype != bool or set(numpy.unique(ground_truth_image)) != set([0, 1]):
+    # Check that the inputs are binary
     if not numpy.array_equal(ground_truth_image, ground_truth_image.astype(bool)):
-        raise ValueError("Binary image expected as input")
+        raise ValueError("ground_truth_image is not a binary image")
+    
+    if not numpy.array_equal(test_image, test_image.astype(bool)):
+        raise ValueError("test_image is not a binary image")
 
     if mask is None:
         mask = numpy.ones_like(ground_truth_image, bool)
@@ -109,16 +108,7 @@ def measure_image_overlap(
         test_labels, ground_truth_labels, mask
     )
 
-    emd = compute_earth_movers_distance(
-        test_labels,
-        ground_truth_labels,
-        decimation_method,
-        max_distance,
-        max_points,
-        penalize_missing,
-    )
-
-    out = {
+    data = {
         "true_positives": true_positives,
         "true_negatives": true_negatives,
         "false_positives": false_positives,
@@ -132,9 +122,9 @@ def measure_image_overlap(
         "TrueNegRate": true_negative_rate,
         "RandIndex": rand_index,
         "AdjustedRandIndex": adjusted_rand_index,
-        "EarthMoversDistance": emd,
     }
-    return out
+
+    return data
 
 
 def compute_rand_index(test_labels, ground_truth_labels, mask):
@@ -239,8 +229,9 @@ def compute_rand_index(test_labels, ground_truth_labels, mask):
 
 
 def compute_earth_movers_distance(
-    input_src_objects,
-    input_dest_objects,
+    ground_truth_image,
+    test_image,
+    mask=None,
     decimation_method: Literal["k_means", "skeleton"] = "k_means",
     max_distance: int = 250,
     max_points: int = 250,
@@ -255,12 +246,38 @@ def compute_earth_movers_distance(
     returns the earth mover's distance
     """
 
-    # Convert labelmaps into CellProfiler objects
-    src_objects = Objects()
-    src_objects.segmented = input_src_objects
+    # Check that the inputs are binary
+    if not numpy.array_equal(ground_truth_image, ground_truth_image.astype(bool)):
+        raise ValueError("ground_truth_image is not a binary image")
+    
+    if not numpy.array_equal(test_image, test_image.astype(bool)):
+        raise ValueError("test_image is not a binary image")
 
+    if mask is None:
+        mask = numpy.ones_like(ground_truth_image, bool)
+
+    # Covert 3D image to 2D long
+    if ground_truth_image.ndim > 2:
+        ground_truth_image = ground_truth_image.reshape(
+            -1, ground_truth_image.shape[-1]
+        )
+
+        test_image = test_image.reshape(-1, test_image.shape[-1])
+
+        mask = mask.reshape(-1, mask.shape[-1])
+
+    ground_truth_labels = scipy.ndimage.label(
+        ground_truth_image & mask, numpy.ones((3, 3), bool)
+    )[0]
+
+    test_labels = scipy.ndimage.label(test_image & mask, numpy.ones((3, 3), bool))[0]
+
+    # Convert labelmaps into CellProfiler objects
     dest_objects = Objects()
-    dest_objects.segmented = input_dest_objects
+    dest_objects.segmented = ground_truth_labels
+
+    src_objects = Objects()
+    src_objects.segmented = test_labels
 
     #
     # if either foreground set is empty, the emd is the penalty.
@@ -294,12 +311,14 @@ def compute_earth_movers_distance(
     c = numpy.sqrt(ioff * ioff + joff * joff).astype(numpy.int32)
     c[c > max_distance] = max_distance
     extra_mass_penalty = max_distance if penalize_missing else 0
-    return centrosome.fastemd.emd_hat_int32(
+
+    emd = centrosome.fastemd.emd_hat_int32(
         src_weights.astype(numpy.int32),
         dest_weights.astype(numpy.int32),
         c,
         extra_mass_penalty=extra_mass_penalty,
     )
+    return emd
 
 
 def get_labels_mask(obj):
