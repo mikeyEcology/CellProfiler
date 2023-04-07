@@ -89,15 +89,6 @@ References
    *2009 IEEE 12th International Conference on Computer Vision*.
 """
 
-import cellprofiler_core.object
-import centrosome.cpmorphology
-import centrosome.fastemd
-import centrosome.filter
-import centrosome.index
-import centrosome.propagate
-import numpy
-import scipy.ndimage
-import scipy.sparse
 from cellprofiler_core.constants.measurement import COLTYPE_FLOAT
 from cellprofiler_core.module import Module
 from cellprofiler_core.setting import Binary
@@ -108,7 +99,7 @@ from cellprofiler_core.setting.text import Integer
 from cellprofiler.modules import _help
 
 from cellprofiler.library.modules import measureimageoverlap
-from cellprofiler.library.utils import convert_setting
+from cellprofiler.library.opts.measureimageoverlap import DM
 
 C_IMAGE_OVERLAP = "Overlap"
 FTR_F_FACTOR = "Ffactor"
@@ -139,9 +130,6 @@ O_IMG = "Foreground/background segmentation"
 
 L_LOAD = "Loaded from a previous run"
 L_CP = "From this CP pipeline"
-
-DM_KMEANS = "K Means"
-DM_SKEL = "Skeleton"
 
 
 class MeasureImageOverlap(Module):
@@ -200,7 +188,7 @@ image using the point selection method (see below).""",
 
         self.decimation_method = Choice(
             "Point selection method",
-            choices=[DM_KMEANS, DM_SKEL],
+            choices=DM,
             doc="""\
 *(Used only when computing the earth mover’s distance)*
 
@@ -222,8 +210,8 @@ worms or neurites.
 .. |image0| image:: {PROTIP_RECOMMEND_ICON}
 """.format(
                 **{
-                    "DM_KMEANS": DM_KMEANS,
-                    "DM_SKEL": DM_SKEL,
+                    "DM_KMEANS": DM.KMEANS.value,
+                    "DM_SKEL": DM.SKELETON.value,
                     "PROTIP_RECOMMEND_ICON": _help.PROTIP_RECOMMEND_ICON,
                 }
             ),
@@ -316,7 +304,7 @@ the two images. Set this setting to “No” to assess no penalty.""",
             test_pixels, 
             mask=mask,
             calculate_emd=self.wants_emd,
-            decimation_method=convert_setting(self.decimation_method.value),
+            decimation_method=self.decimation_method.enum_member,
             max_distance=self.max_distance.value,
             max_points=self.max_points.value,
             penalize_missing=self.penalize_missing
@@ -473,7 +461,7 @@ the two images. Set this setting to “No” to assess no penalty.""",
             setting_values = setting_values + [
                 "No",  # wants_emd
                 250,  # max points
-                DM_KMEANS,  # decimation method
+                DM.KMEANS.value,  # decimation method
                 250,  # max distance
                 "No",  # penalize missing
             ]

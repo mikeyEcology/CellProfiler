@@ -8,6 +8,7 @@ import centrosome.fastemd
 from typing import Literal
 from sklearn.cluster import KMeans
 from cellprofiler.library.object import Objects
+from cellprofiler.library.opts import measureimageoverlap as mio
 
 
 def measure_image_overlap_statistics(
@@ -232,7 +233,7 @@ def compute_earth_movers_distance(
     ground_truth_image,
     test_image,
     mask=None,
-    decimation_method: Literal["k_means", "skeleton"] = "k_means",
+    decimation_method: mio.DM = mio.DM.KMEANS,
     max_distance: int = 250,
     max_points: int = 250,
     penalize_missing: bool = False,
@@ -291,12 +292,14 @@ def compute_earth_movers_distance(
                 return numpy.sum(demons.areas) * max_distance
             else:
                 return 0
-    if decimation_method.casefold() == "k_means":
+    if decimation_method == mio.DM.KMEANS:
         isrc, jsrc = get_kmeans_points(src_objects, dest_objects, max_points)
         idest, jdest = isrc, jsrc
-    else:
+    elif decimation_method == mio.DM.SKELETON:
         isrc, jsrc = get_skeleton_points(src_objects, max_points)
         idest, jdest = get_skeleton_points(dest_objects, max_points)
+    else:
+        raise TypeError("Unknown type for decimation method: %s" % decimation_method)
     src_weights, dest_weights = [
         get_weights(i, j, get_labels_mask(objects))
         for i, j, objects in (

@@ -1,3 +1,4 @@
+# TODO: get rid of this, no longer needed
 def convert_setting(gui_setting_str):
     """
     Convert GUI setting strings to something cellprofiler

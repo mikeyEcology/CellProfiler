@@ -1,3 +1,4 @@
+from cellprofiler.library.opts.measureimageoverlap import DM
 from cellprofiler.library.functions.measurement import (
     measure_image_overlap_statistics,
     compute_earth_movers_distance,
@@ -11,7 +12,7 @@ def measureimageoverlap(
     calculate_emd=False,
     max_distance=250,
     penalize_missing=False,
-    decimation_method="k_means",
+    decimation_method: DM = DM.KMEANS,
     max_points=250,
 ):
 
