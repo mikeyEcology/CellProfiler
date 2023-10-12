@@ -77,7 +77,7 @@ setuptools.setup(
         "mahotas~=1.4.13",
         "matplotlib~=3.1.3",
         "mysqlclient~=2.0.0",
-        "numpy~=1.24.4",
+        "numpy",
         "Pillow~=10.0.0",
         "pyzmq~=22.3.0",
         "sentry-sdk>=0.18.0,<=1.31.0",
